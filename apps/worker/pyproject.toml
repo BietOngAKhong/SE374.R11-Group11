@@ -1,0 +1,21 @@
+[project]
+name = "brain-tumor-worker"
+version = "0.1.0"
+description = "FastAPI 3D UNet inference worker for brain tumor segmentation"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.111.0",
+    "uvicorn[standard]>=0.30.0",
+    "pydantic>=2.7.0",
+    "pydantic-settings>=2.3.0",
+    "python-multipart>=0.0.9",
+    "torch>=2.2.0",
+    "nibabel>=5.2.0",
+    "numpy>=1.26.0,<2.0.0",
+    "scipy>=1.12.0"
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
