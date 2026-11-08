@@ -1,13 +1,22 @@
-import io
-import json
-from fastapi import APIRouter, File, UploadFile, HTTPException, Response
-from fastapi.responses import JSONResponse
+import time
+from pathlib import Path
+from fastapi import APIRouter, File, UploadFile, HTTPException, Query, BackgroundTasks
+from fastapi.responses import JSONResponse, FileResponse
 
 from .config import settings
 from .inference import inference_engine
-from .schemas import HealthResponse, InferenceMetadataResponse
+from .schemas import HealthResponse
 
 router = APIRouter()
+
+def cleanup_old_temp_files(temp_dir: Path, max_age_seconds: int = 86400) -> None:
+    now = time.time()
+    for file_path in temp_dir.glob("*.nii.gz"):
+        try:
+            if now - file_path.stat().st_mtime > max_age_seconds:
+                file_path.unlink()
+        except Exception:
+            pass
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check():
@@ -19,7 +28,8 @@ async def health_check():
     )
 
 @router.post("/api/v1/inference")
-async def run_inference(
+async def run_uq_inference_endpoint(
+    background_tasks: BackgroundTasks,
     flair: UploadFile = File(...),
     t1: UploadFile = File(...),
     t1ce: UploadFile = File(...),
@@ -29,54 +39,39 @@ async def run_inference(
         raise HTTPException(status_code=503, detail="Model is not initialized")
 
     try:
-        flair_bytes = io.BytesIO(await flair.read())
-        t1_bytes = io.BytesIO(await t1.read())
-        t1ce_bytes = io.BytesIO(await t1ce.read())
-        t2_bytes = io.BytesIO(await t2.read())
+        flair_bytes = await flair.read()
+        t1_bytes = await t1.read()
+        t1ce_bytes = await t1ce.read()
+        t2_bytes = await t2.read()
 
-        nii_bytes, metadata = inference_engine.infer_volumes(
+        result = inference_engine.run_uq_inference(
             flair_bytes,
             t1_bytes,
             t1ce_bytes,
-            t2_bytes
+            t2_bytes,
+            num_passes=20
         )
 
-        return Response(
-            content=nii_bytes,
-            media_type="application/gzip",
-            headers={
-                "Content-Disposition": "attachment; filename=prediction_seg.nii.gz",
-                "X-Inference-Metadata": json.dumps(metadata),
-                "Access-Control-Expose-Headers": "X-Inference-Metadata"
-            }
-        )
+        background_tasks.add_task(cleanup_old_temp_files, inference_engine.temp_dir)
+
+        return JSONResponse(content=result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/api/v1/inference/metrics", response_model=InferenceMetadataResponse)
-async def run_inference_metrics_only(
-    flair: UploadFile = File(...),
-    t1: UploadFile = File(...),
-    t1ce: UploadFile = File(...),
-    t2: UploadFile = File(...)
+@router.get("/api/mask/{task_id}")
+async def get_mask_endpoint(
+    task_id: str,
+    p: int = Query(50, description="Percentile level: 5, 50, or 95")
 ):
-    if inference_engine.model is None:
-        raise HTTPException(status_code=503, detail="Model is not initialized")
-
-    try:
-        flair_bytes = io.BytesIO(await flair.read())
-        t1_bytes = io.BytesIO(await t1.read())
-        t1ce_bytes = io.BytesIO(await t1ce.read())
-        t2_bytes = io.BytesIO(await t2.read())
-
-        _, metadata = inference_engine.infer_volumes(
-            flair_bytes,
-            t1_bytes,
-            t1ce_bytes,
-            t2_bytes
+    mask_path = inference_engine.get_mask_file_path(task_id, p)
+    if mask_path is None or not mask_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Mask for task_id '{task_id}' with percentile p={p} was not found"
         )
 
-        return JSONResponse(content=metadata)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
+    return FileResponse(
+        path=str(mask_path),
+        media_type="application/gzip",
+        filename=f"{task_id}_p{p}.nii.gz"
+    )

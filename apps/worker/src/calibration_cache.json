@@ -1,0 +1,31 @@
+{
+  "calibration_factors": {
+    "a_wt": 1.1524,
+    "a_tc": 1.1218,
+    "a_et": 1.0845
+  },
+  "validation_details": {
+    "dataset": "val_calibration",
+    "total_cases": 34,
+    "mc_dropout_passes": 20,
+    "method": "OLS Uniform Theoretical Quantile Matching",
+    "folds": {
+      "WT": [
+        {"fold": 1, "train_cases": 23, "val_cases": 11, "slope": 1.1482, "coverage_95": 0.9091},
+        {"fold": 2, "train_cases": 23, "val_cases": 11, "slope": 1.1610, "coverage_95": 1.0000},
+        {"fold": 3, "train_cases": 22, "val_cases": 12, "slope": 1.1480, "coverage_95": 0.9167}
+      ],
+      "TC": [
+        {"fold": 1, "train_cases": 23, "val_cases": 11, "slope": 1.1190, "coverage_95": 0.9091},
+        {"fold": 2, "train_cases": 23, "val_cases": 11, "slope": 1.1305, "coverage_95": 0.9091},
+        {"fold": 3, "train_cases": 22, "val_cases": 12, "slope": 1.1160, "coverage_95": 1.0000}
+      ],
+      "ET": [
+        {"fold": 1, "train_cases": 23, "val_cases": 11, "slope": 1.0810, "coverage_95": 0.9091},
+        {"fold": 2, "train_cases": 23, "val_cases": 11, "slope": 1.0920, "coverage_95": 1.0000},
+        {"fold": 3, "train_cases": 22, "val_cases": 12, "slope": 1.0805, "coverage_95": 0.9167}
+      ]
+    }
+  }
+}
+

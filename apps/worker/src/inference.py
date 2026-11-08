@@ -1,8 +1,10 @@
 import io
-import math
 import os
+import uuid
+import tempfile
 from pathlib import Path
-from typing import Tuple, Dict, Any
+from typing import Dict, Any, List
+
 import nibabel as nib
 import numpy as np
 from scipy import ndimage
@@ -10,11 +12,20 @@ import torch
 
 from .config import settings
 from .model import ResidualUNet3D
+from .calibration import calibration_manager
+
+def enable_mc_dropout(model: torch.nn.Module) -> None:
+    model.eval()
+    for m in model.modules():
+        if isinstance(m, (torch.nn.Dropout, torch.nn.Dropout2d, torch.nn.Dropout3d)):
+            m.train()
 
 class InferenceEngine:
     def __init__(self):
         self.model: ResidualUNet3D | None = None
         self.device = self._resolve_device()
+        self.temp_dir = Path(__file__).resolve().parent.parent / "temp"
+        self.temp_dir.mkdir(parents=True, exist_ok=True)
 
     def _resolve_device(self) -> torch.device:
         target = settings.DEVICE.lower()
@@ -46,7 +57,7 @@ class InferenceEngine:
                 model.load_state_dict(checkpoint)
         
         model.to(self.device)
-        model.eval()
+        enable_mc_dropout(model)
         self.model = model
 
     @staticmethod
@@ -63,11 +74,9 @@ class InferenceEngine:
             out[mask] = vol[mask] / p95
         return out
 
-    def predict_sliding_window(self, image: np.ndarray) -> np.ndarray:
+    def predict_mc_dropout_batched(self, image: np.ndarray, num_passes: int = 20, batch_t: int = 2) -> Dict[str, np.ndarray]:
         c, d, h, w = image.shape
-        pd = settings.PATCH_DEPTH
-        ph = settings.PATCH_HEIGHT
-        pw = settings.PATCH_WIDTH
+        pd, ph, pw = settings.PATCH_DEPTH, settings.PATCH_HEIGHT, settings.PATCH_WIDTH
         overlap = settings.OVERLAP
 
         step_d = max(1, int(pd * (1 - overlap)))
@@ -86,31 +95,84 @@ class InferenceEngine:
         if steps_w[-1] + pw < w:
             steps_w.append(w - pw)
 
-        prob_accum = np.zeros((4, d, h, w), dtype=np.float32)
-        count_accum = np.zeros((d, h, w), dtype=np.float32)
-
+        prob_wt_list, prob_tc_list, prob_et_list = [], [], []
         is_cuda = self.device.type == "cuda"
-        amp_enabled = is_cuda
+        enable_mc_dropout(self.model)
 
         with torch.no_grad():
-            for sd in steps_d:
-                for sh in steps_h:
-                    for sw in steps_w:
-                        sub_vol = image[:, sd:sd + pd, sh:sh + ph, sw:sw + pw]
-                        tensor = torch.from_numpy(sub_vol.astype(np.float32)).unsqueeze(0).to(self.device)
+            for t_step in range(0, num_passes, batch_t):
+                cur_b = min(batch_t, num_passes - t_step)
+                prob_accum = np.zeros((cur_b, 4, d, h, w), dtype=np.float32)
+                count_accum = np.zeros((d, h, w), dtype=np.float32)
 
-                        if amp_enabled:
-                            with torch.autocast(device_type="cuda", dtype=torch.float16):
+                for sd in steps_d:
+                    for sh in steps_h:
+                        for sw in steps_w:
+                            sub_vol = image[:, sd:sd + pd, sh:sh + ph, sw:sw + pw]
+                            tensor = torch.from_numpy(sub_vol.astype(np.float32)).unsqueeze(0).repeat(cur_b, 1, 1, 1, 1).to(self.device)
+
+                            if is_cuda:
+                                with torch.autocast(device_type="cuda", dtype=torch.float16):
+                                    logits = self.model(tensor)
+                            else:
                                 logits = self.model(tensor)
-                        else:
-                            logits = self.model(tensor)
 
-                        probs = torch.softmax(logits, dim=1).squeeze(0).cpu().numpy()
-                        prob_accum[:, sd:sd + pd, sh:sh + ph, sw:sw + pw] += probs
-                        count_accum[sd:sd + pd, sh:sh + ph, sw:sw + pw] += 1.0
+                            probs = torch.softmax(logits, dim=1).cpu().numpy()
+                            prob_accum[:, :, sd:sd + pd, sh:sh + ph, sw:sw + pw] += probs
+                            count_accum[sd:sd + pd, sh:sh + ph, sw:sw + pw] += 1.0
 
-        prob_accum /= np.maximum(count_accum, 1.0)
-        return prob_accum.argmax(axis=0).astype(np.uint8)
+                count_accum = np.maximum(count_accum, 1.0)
+                prob_accum /= count_accum[None, None, ...]
+
+                for b in range(cur_b):
+                    p_et = prob_accum[b, 1]
+                    p_tc = prob_accum[b, 1] + prob_accum[b, 2]
+                    p_wt = prob_accum[b, 1] + prob_accum[b, 2] + prob_accum[b, 3]
+
+                    prob_wt_list.append(p_wt.astype(np.float16))
+                    prob_tc_list.append(p_tc.astype(np.float16))
+                    prob_et_list.append(p_et.astype(np.float16))
+
+        return {
+            "WT": np.stack(prob_wt_list, axis=0),
+            "TC": np.stack(prob_tc_list, axis=0),
+            "ET": np.stack(prob_et_list, axis=0)
+        }
+
+    def _compute_fast_gpu_quantiles(self, prob_arr: np.ndarray, voxel_vol_cm3: float):
+        t_prob = torch.from_numpy(prob_arr.astype(np.float32)).to(self.device)
+        d, h, w = prob_arr.shape[1], prob_arr.shape[2], prob_arr.shape[3]
+
+        valid_mask = (t_prob.max(dim=0).values > 0.05)
+        q_levels = torch.linspace(0.01, 0.99, 99, device=self.device)
+
+        if not valid_mask.any():
+            return [0.0] * 99, np.zeros((d, h, w), dtype=bool), np.zeros((d, h, w), dtype=bool), np.zeros((d, h, w), dtype=bool)
+
+        valid_voxels = t_prob[:, valid_mask]
+        q_voxels = torch.quantile(valid_voxels, q_levels, dim=0)
+
+        vol_cdf = (q_voxels >= 0.5).sum(dim=1).cpu().numpy().astype(np.float64) * voxel_vol_cm3
+
+        m05_valid = (q_voxels[4] >= 0.5).cpu().numpy()
+        m50_valid = (q_voxels[49] >= 0.5).cpu().numpy()
+        m95_valid = (q_voxels[94] >= 0.5).cpu().numpy()
+
+        valid_mask_np = valid_mask.cpu().numpy()
+
+        mask_05 = np.zeros((d, h, w), dtype=bool)
+        mask_50 = np.zeros((d, h, w), dtype=bool)
+        mask_95 = np.zeros((d, h, w), dtype=bool)
+
+        mask_05[valid_mask_np] = m05_valid
+        mask_50[valid_mask_np] = m50_valid
+        mask_95[valid_mask_np] = m95_valid
+
+        del t_prob, valid_voxels, q_voxels
+        if self.device.type == "cuda":
+            torch.cuda.empty_cache()
+
+        return [round(float(v), 2) for v in vol_cdf], mask_05, mask_50, mask_95
 
     @staticmethod
     def postprocess_volume(pred: np.ndarray, second_lcc_min: int, et_min: int) -> np.ndarray:
@@ -135,22 +197,44 @@ class InferenceEngine:
 
         return output
 
-    def infer_volumes(
+    @staticmethod
+    def _load_nii_from_bytes(data: bytes) -> nib.Nifti1Image:
+        with tempfile.NamedTemporaryFile(suffix=".nii.gz", delete=False) as tmp:
+            tmp.write(data)
+            tmp_path = tmp.name
+        try:
+            img = nib.load(tmp_path)
+            data_arr = img.get_fdata(dtype=np.float32)
+            affine = img.affine.copy()
+            header = img.header.copy()
+            return nib.Nifti1Image(data_arr, affine, header)
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+    @staticmethod
+    def _save_nii_to_file(mask_arr: np.ndarray, affine: np.ndarray, header: Any, out_path: Path) -> None:
+        spatial = mask_arr.transpose(1, 2, 0).astype(np.uint8)
+        nii_obj = nib.Nifti1Image(spatial, affine, header)
+        nib.save(nii_obj, str(out_path))
+
+    def run_uq_inference(
         self,
-        flair_file: io.BytesIO,
-        t1_file: io.BytesIO,
-        t1ce_file: io.BytesIO,
-        t2_file: io.BytesIO
-    ) -> Tuple[bytes, Dict[str, Any]]:
-        flair_nii = nib.Nifti1Image.from_stream(flair_file)
-        t1_nii = nib.Nifti1Image.from_stream(t1_file)
-        t1ce_nii = nib.Nifti1Image.from_stream(t1ce_file)
-        t2_nii = nib.Nifti1Image.from_stream(t2_file)
+        flair_bytes: bytes,
+        t1_bytes: bytes,
+        t1ce_bytes: bytes,
+        t2_bytes: bytes,
+        num_passes: int = 20
+    ) -> Dict[str, Any]:
+        flair_nii = self._load_nii_from_bytes(flair_bytes)
+        t1_nii = self._load_nii_from_bytes(t1_bytes)
+        t1ce_nii = self._load_nii_from_bytes(t1ce_bytes)
+        t2_nii = self._load_nii_from_bytes(t2_bytes)
 
         affine = flair_nii.affine
         header = flair_nii.header
         zooms = header.get_zooms()[:3]
-        voxel_vol_mm3 = float(abs(zooms[0] * zooms[1] * zooms[2]))
+        voxel_vol_cm3 = float(abs(zooms[0] * zooms[1] * zooms[2])) / 1000.0
 
         flair_data = self.p95_normalize(flair_nii.get_fdata(dtype=np.float32))
         t1_data = self.p95_normalize(t1_nii.get_fdata(dtype=np.float32))
@@ -158,58 +242,73 @@ class InferenceEngine:
         t2_data = self.p95_normalize(t2_nii.get_fdata(dtype=np.float32))
 
         stacked = np.stack([flair_data, t1_data, t1ce_data, t2_data], axis=0).transpose(0, 3, 1, 2)
-        raw_pred = self.predict_sliding_window(stacked)
+        d, h, w = stacked.shape[1], stacked.shape[2], stacked.shape[3]
 
-        refined_pred = self.postprocess_volume(
-            raw_pred,
-            settings.SECOND_LCC_MIN_VOXELS,
-            settings.ET_MIN_VOXELS
-        )
+        mc_probs = self.predict_mc_dropout_batched(stacked, num_passes=num_passes, batch_t=2)
 
-        final_spatial = refined_pred.transpose(1, 2, 0)
-        output_nii = nib.Nifti1Image(final_spatial, affine, header)
+        wt_cdf, wt_05, wt_50, wt_95 = self._compute_fast_gpu_quantiles(mc_probs["WT"], voxel_vol_cm3)
+        tc_cdf, tc_05, tc_50, tc_95 = self._compute_fast_gpu_quantiles(mc_probs["TC"], voxel_vol_cm3)
+        et_cdf, et_05, et_50, et_95 = self._compute_fast_gpu_quantiles(mc_probs["ET"], voxel_vol_cm3)
 
-        buffer = io.BytesIO()
-        file_map = output_nii.make_file_map({'image': buffer, 'header': buffer})
-        output_nii.to_file_map(file_map)
-        nii_bytes = buffer.getvalue()
+        def create_multilabel_mask(wt_m: np.ndarray, tc_m: np.ndarray, et_m: np.ndarray) -> np.ndarray:
+            m = np.zeros((d, h, w), dtype=np.uint8)
+            m[wt_m] = 3
+            m[tc_m] = 2
+            m[et_m] = 1
+            return self.postprocess_volume(m, settings.SECOND_LCC_MIN_VOXELS, settings.ET_MIN_VOXELS)
 
-        et_voxels = int((final_spatial == 1).sum())
-        ncr_voxels = int((final_spatial == 2).sum())
-        ed_voxels = int((final_spatial == 3).sum())
-        tc_voxels = et_voxels + ncr_voxels
-        wt_voxels = et_voxels + ncr_voxels + ed_voxels
+        mask_p05 = create_multilabel_mask(wt_05, tc_05, et_05)
+        mask_p50 = create_multilabel_mask(wt_50, tc_50, et_50)
+        mask_p95 = create_multilabel_mask(wt_95, tc_95, et_95)
 
-        metadata = {
-            "success": True,
-            "input_shape": list(flair_data.shape),
-            "output_shape": list(final_spatial.shape),
-            "voxel_dimensions": [float(z) for z in zooms],
-            "metrics": {
-                "whole_tumor": {
-                    "voxel_count": wt_voxels,
-                    "volume_mm3": round(wt_voxels * voxel_vol_mm3, 2)
+        task_id = str(uuid.uuid4())
+        p05_path = self.temp_dir / f"{task_id}_p05.nii.gz"
+        p50_path = self.temp_dir / f"{task_id}_p50.nii.gz"
+        p95_path = self.temp_dir / f"{task_id}_p95.nii.gz"
+
+        self._save_nii_to_file(mask_p05, affine, header, p05_path)
+        self._save_nii_to_file(mask_p50, affine, header, p50_path)
+        self._save_nii_to_file(mask_p95, affine, header, p95_path)
+
+        factors = calibration_manager.cached_factors
+        percentiles_range = list(range(1, 100))
+
+        return {
+            "task_id": task_id,
+            "masks": {
+                "p05_url": f"/api/mask/{task_id}?p=5",
+                "p50_url": f"/api/mask/{task_id}?p=50",
+                "p95_url": f"/api/mask/{task_id}?p=95"
+            },
+            "volumes_cm3": {
+                "WT": {
+                    "median": wt_cdf[49],
+                    "percentiles": percentiles_range,
+                    "volumes_cm3": wt_cdf
                 },
-                "tumor_core": {
-                    "voxel_count": tc_voxels,
-                    "volume_mm3": round(tc_voxels * voxel_vol_mm3, 2)
+                "TC": {
+                    "median": tc_cdf[49],
+                    "percentiles": percentiles_range,
+                    "volumes_cm3": tc_cdf
                 },
-                "enhancing_tumor": {
-                    "voxel_count": et_voxels,
-                    "volume_mm3": round(et_voxels * voxel_vol_mm3, 2)
-                },
-                "peritumoral_edema": {
-                    "voxel_count": ed_voxels,
-                    "volume_mm3": round(ed_voxels * voxel_vol_mm3, 2)
-                },
-                "necrotic_core": {
-                    "voxel_count": ncr_voxels,
-                    "volume_mm3": round(ncr_voxels * voxel_vol_mm3, 2)
+                "ET": {
+                    "median": et_cdf[49],
+                    "percentiles": percentiles_range,
+                    "volumes_cm3": et_cdf
                 }
+            },
+            "calibration_factors": {
+                "a_wt": float(factors.get("a_wt", 1.1524)),
+                "a_tc": float(factors.get("a_tc", 1.1218)),
+                "a_et": float(factors.get("a_et", 1.0845))
             }
         }
 
-        return nii_bytes, metadata
+    def get_mask_file_path(self, task_id: str, p: int) -> Path | None:
+        p_str = f"p0{p}" if p < 10 else f"p{p}"
+        target = self.temp_dir / f"{task_id}_{p_str}.nii.gz"
+        if target.exists():
+            return target
+        return None
 
 inference_engine = InferenceEngine()
-
