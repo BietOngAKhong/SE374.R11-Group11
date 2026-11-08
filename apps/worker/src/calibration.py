@@ -4,6 +4,13 @@ from typing import Dict, List, Any, Tuple
 import numpy as np
 
 class CalibrationManager:
+    PERCENTILES_LEVELS = np.linspace(0.01, 0.99, 99)
+    MODALITY_CONFIG = {
+        "WT": (0.25, 1.0),
+        "TC": (0.25, 0.8),
+        "ET": (0.30, 0.6)
+    }
+
     def __init__(self, cache_path: str | Path | None = None):
         if cache_path is None:
             self.cache_path = Path(__file__).resolve().parent / "calibration_cache.json"
@@ -21,107 +28,150 @@ class CalibrationManager:
                 pass
 
         return {
-            "a_wt": 1.15,
-            "a_tc": 1.12,
-            "a_et": 1.08
+            "a_wt": 1.75,
+            "a_tc": 2.867,
+            "a_et": 2.6526
         }
 
-    @staticmethod
-    def fit_slope_ols(alphas: np.ndarray) -> float:
-        n = len(alphas)
-        if n < 2:
-            return 1.0
+    @classmethod
+    def compute_conformal_scores(
+        cls,
+        cdfs_vols: np.ndarray,
+        gt_vols: np.ndarray,
+        modality: str = "WT",
+        percentiles_levels: np.ndarray | None = None
+    ) -> np.ndarray:
+        if percentiles_levels is None:
+            percentiles_levels = cls.PERCENTILES_LEVELS
 
-        sorted_alphas = np.sort(alphas)
-        k = np.arange(1, n + 1)
-        u_k = (k - 0.5) / n
+        idx_025 = int(np.argmin(np.abs(percentiles_levels - 0.025)))
+        idx_500 = int(np.argmin(np.abs(percentiles_levels - 0.500)))
+        idx_975 = int(np.argmin(np.abs(percentiles_levels - 0.975)))
 
-        x = sorted_alphas - 0.5
-        y = u_k - 0.5
+        rel_factor, abs_floor = cls.MODALITY_CONFIG.get(modality, (0.25, 0.8))
 
-        denominator = float(np.sum(x ** 2))
-        if denominator < 1e-9:
-            return 1.0
+        scores = []
+        for cdf_vol, gt_vol in zip(cdfs_vols, gt_vols):
+            mono_cdf = np.maximum.accumulate(cdf_vol)
+            v_low = mono_cdf[idx_025]
+            v_med = mono_cdf[idx_500]
+            v_high = mono_cdf[idx_975]
 
-        numerator = float(np.sum(x * y))
-        slope = numerator / denominator
-        return max(0.1, min(slope, 10.0))
+            raw_half_width = max((v_high - v_low) / 2.0, 0.0)
+            baseline_half_width = max(raw_half_width, rel_factor * v_med + abs_floor)
+
+            residual = abs(gt_vol - v_med)
+            s = residual / baseline_half_width
+            scores.append(s)
+
+        return np.array(scores, dtype=np.float64)
 
     @classmethod
-    def calculate_alphas(cls, predicted_samples: List[List[float]], gt_volumes: List[float]) -> np.ndarray:
-        if len(predicted_samples) > 0 and len(predicted_samples[0]) == 99:
-            return cls.calculate_alphas_from_cdfs(predicted_samples, gt_volumes)
-        alphas = []
-        for samples, gt in zip(predicted_samples, gt_volumes):
-            samples_arr = np.asarray(samples, dtype=np.float32)
-            t = len(samples_arr)
-            count_le = float(np.sum(samples_arr <= gt))
-            alpha = (count_le + 0.5) / (t + 1.0)
-            alphas.append(float(np.clip(alpha, 1e-4, 1.0 - 1e-4)))
-        return np.asarray(alphas, dtype=np.float32)
+    def fit_conformal_scale(cls, scores_train: np.ndarray, target_coverage: float = 0.95) -> float:
+        n = len(scores_train)
+        if n == 0:
+            return 1.05
+        q_level = min(1.0, float(np.ceil((n + 1) * target_coverage) / n))
+        scale = float(np.quantile(scores_train, min(q_level, 0.95)))
+        return float(np.clip(scale, 1.05, 3.50))
 
     @classmethod
-    def calculate_alphas_from_cdfs(cls, cdf_curves: List[List[float]], gt_volumes: List[float], q_levels: np.ndarray | None = None) -> np.ndarray:
-        if q_levels is None:
-            q_levels = np.linspace(0.01, 0.99, 99)
-        alphas = []
-        for cdf, gt in zip(cdf_curves, gt_volumes):
-            cdf_arr = np.asarray(cdf, dtype=np.float32)
-            alpha = float(np.interp(gt, cdf_arr, q_levels))
-            alphas.append(float(np.clip(alpha, 1e-4, 1.0 - 1e-4)))
-        return np.asarray(alphas, dtype=np.float32)
+    def evaluate_conformal_coverage(
+        cls,
+        cdfs_vols: np.ndarray,
+        gt_vols: np.ndarray,
+        scale_factor: float,
+        modality: str = "WT",
+        percentiles_levels: np.ndarray | None = None
+    ) -> float:
+        if percentiles_levels is None:
+            percentiles_levels = cls.PERCENTILES_LEVELS
+
+        idx_025 = int(np.argmin(np.abs(percentiles_levels - 0.025)))
+        idx_500 = int(np.argmin(np.abs(percentiles_levels - 0.500)))
+        idx_975 = int(np.argmin(np.abs(percentiles_levels - 0.975)))
+
+        rel_factor, abs_floor = cls.MODALITY_CONFIG.get(modality, (0.25, 0.8))
+
+        covered = 0
+        n = len(gt_vols)
+        if n == 0:
+            return 1.0
+
+        for cdf_vol, gt_vol in zip(cdfs_vols, gt_vols):
+            mono_cdf = np.maximum.accumulate(cdf_vol)
+            v_low = mono_cdf[idx_025]
+            v_med = mono_cdf[idx_500]
+            v_high = mono_cdf[idx_975]
+
+            raw_half_width = max((v_high - v_low) / 2.0, 0.0)
+            baseline_half_width = max(raw_half_width, rel_factor * v_med + abs_floor)
+
+            ci_low = max(0.0, v_med - scale_factor * baseline_half_width)
+            ci_high = v_med + scale_factor * baseline_half_width
+
+            if ci_low <= gt_vol <= ci_high:
+                covered += 1
+
+        return float(covered / n)
 
     @classmethod
     def run_three_fold_cv(
         cls,
-        predicted_samples: List[List[float]],
-        gt_volumes: List[float]
+        predicted_cdfs: List[List[float]] | np.ndarray,
+        gt_volumes: List[float] | np.ndarray,
+        modality: str = "WT"
     ) -> Tuple[float, List[Dict[str, Any]]]:
-        n = len(gt_volumes)
+        cdfs = np.asarray(predicted_cdfs, dtype=np.float64)
+        gts = np.asarray(gt_volumes, dtype=np.float64)
+        n = len(gts)
+
         if n < 3:
-            alphas = cls.calculate_alphas(predicted_samples, gt_volumes)
-            slope = cls.fit_slope_ols(alphas)
-            return slope, [{"fold": 1, "slope": slope, "coverage_95": 1.0}]
+            all_scores = cls.compute_conformal_scores(cdfs, gts, modality=modality)
+            scale = cls.fit_conformal_scale(all_scores)
+            return round(scale, 4), [{"fold": 1, "train_cases": n, "val_cases": n, "slope": round(scale, 4), "coverage_95": 1.0}]
 
-        alphas = cls.calculate_alphas(predicted_samples, gt_volumes)
-        fold_size = n // 3
-        fold_results = []
-        slopes = []
+        indices = np.arange(n)
+        rng = np.random.RandomState(42)
+        rng.shuffle(indices)
 
-        for fold_idx in range(3):
-            val_start = fold_idx * fold_size
-            val_end = (fold_idx + 1) * fold_size if fold_idx < 2 else n
+        fold_sizes = np.full(3, n // 3, dtype=int)
+        fold_sizes[:n % 3] += 1
 
-            test_alphas = alphas[val_start:val_end]
-            train_alphas = np.concatenate([alphas[:val_start], alphas[val_end:]])
+        current = 0
+        folds_details = []
 
-            fold_slope = cls.fit_slope_ols(train_alphas)
-            slopes.append(fold_slope)
+        for fold_idx, fold_size in enumerate(fold_sizes):
+            start, stop = current, current + fold_size
+            test_idx = indices[start:stop]
+            train_idx = np.concatenate([indices[:start], indices[stop:]])
+            current = stop
 
-            half_width = 0.475 / fold_slope
-            alpha_low = max(0.0, 0.5 - half_width)
-            alpha_high = min(1.0, 0.5 + half_width)
+            train_cdfs, train_gts = cdfs[train_idx], gts[train_idx]
+            test_cdfs, test_gts = cdfs[test_idx], gts[test_idx]
 
-            covered = np.sum((test_alphas >= alpha_low) & (test_alphas <= alpha_high))
-            coverage = float(covered / len(test_alphas)) if len(test_alphas) > 0 else 1.0
+            train_scores = cls.compute_conformal_scores(train_cdfs, train_gts, modality=modality)
+            a_fold = cls.fit_conformal_scale(train_scores, target_coverage=0.95)
+            cov_95 = cls.evaluate_conformal_coverage(test_cdfs, test_gts, a_fold, modality=modality)
 
-            fold_results.append({
+            folds_details.append({
                 "fold": fold_idx + 1,
-                "train_cases": len(train_alphas),
-                "val_cases": len(test_alphas),
-                "slope": round(float(fold_slope), 4),
-                "coverage_95": round(coverage, 4)
+                "train_cases": int(len(train_idx)),
+                "val_cases": int(len(test_idx)),
+                "slope": round(float(a_fold), 4),
+                "coverage_95": round(float(cov_95), 4)
             })
 
-        overall_slope = float(np.mean(slopes))
-        return round(overall_slope, 4), fold_results
+        all_scores = cls.compute_conformal_scores(cdfs, gts, modality=modality)
+        final_scale = cls.fit_conformal_scale(all_scores, target_coverage=0.95)
+        return round(float(final_scale), 4), folds_details
 
     def save_cache(self, factors: Dict[str, float], validation_details: Dict[str, Any] | None = None) -> None:
         payload = {
             "calibration_factors": {
-                "a_wt": round(float(factors.get("a_wt", 1.0)), 4),
-                "a_tc": round(float(factors.get("a_tc", 1.0)), 4),
-                "a_et": round(float(factors.get("a_et", 1.0)), 4)
+                "a_wt": round(float(factors.get("a_wt", 1.75)), 4),
+                "a_tc": round(float(factors.get("a_tc", 2.867)), 4),
+                "a_et": round(float(factors.get("a_et", 2.6526)), 4)
             },
             "validation_details": validation_details or {}
         }
@@ -129,4 +179,3 @@ class CalibrationManager:
         self.cached_factors = payload["calibration_factors"]
 
 calibration_manager = CalibrationManager()
-

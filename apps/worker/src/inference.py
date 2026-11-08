@@ -3,7 +3,7 @@ import os
 import uuid
 import tempfile
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 
 import nibabel as nib
 import numpy as np
@@ -74,10 +74,29 @@ class InferenceEngine:
             out[mask] = vol[mask] / p95
         return out
 
-    def predict_mc_dropout_batched(self, image: np.ndarray, num_passes: int = 20, batch_t: int = 2) -> Dict[str, np.ndarray]:
-        c, d, h, w = image.shape
+    def predict_mc_dropout_batched(
+        self,
+        image: np.ndarray,
+        num_passes: int = 20,
+        batch_t: int = 2
+    ) -> Dict[str, np.ndarray]:
+        c, orig_d, orig_h, orig_w = image.shape
         pd, ph, pw = settings.PATCH_DEPTH, settings.PATCH_HEIGHT, settings.PATCH_WIDTH
         overlap = settings.OVERLAP
+
+        pad_d = max(0, pd - orig_d)
+        pad_h = max(0, ph - orig_h)
+        pad_w = max(0, pw - orig_w)
+
+        if pad_d > 0 or pad_h > 0 or pad_w > 0:
+            image = np.pad(
+                image,
+                ((0, 0), (0, pad_d), (0, pad_h), (0, pad_w)),
+                mode="constant",
+                constant_values=0
+            )
+
+        _, d, h, w = image.shape
 
         step_d = max(1, int(pd * (1 - overlap)))
         step_h = max(1, int(ph * (1 - overlap)))
@@ -123,6 +142,7 @@ class InferenceEngine:
 
                 count_accum = np.maximum(count_accum, 1.0)
                 prob_accum /= count_accum[None, None, ...]
+                prob_accum = prob_accum[:, :, :orig_d, :orig_h, :orig_w]
 
                 for b in range(cur_b):
                     p_et = prob_accum[b, 1]
@@ -139,27 +159,44 @@ class InferenceEngine:
             "ET": np.stack(prob_et_list, axis=0)
         }
 
-    def _compute_fast_gpu_quantiles(self, prob_arr: np.ndarray, voxel_vol_cm3: float):
+    def compute_calibrated_quantiles(
+        self,
+        prob_arr: np.ndarray,
+        voxel_vol_cm3: float,
+        a_scale: float = 1.0
+    ) -> Tuple[List[float], Tuple[float, float], np.ndarray, np.ndarray, np.ndarray]:
         t_prob = torch.from_numpy(prob_arr.astype(np.float32)).to(self.device)
         d, h, w = prob_arr.shape[1], prob_arr.shape[2], prob_arr.shape[3]
 
-        valid_mask = (t_prob.max(dim=0).values > 0.05)
+        valid_mask = (t_prob.max(dim=0).values > 0.01)
         q_levels = torch.linspace(0.01, 0.99, 99, device=self.device)
 
+        empty_mask = np.zeros((d, h, w), dtype=bool)
         if not valid_mask.any():
-            return [0.0] * 99, np.zeros((d, h, w), dtype=bool), np.zeros((d, h, w), dtype=bool), np.zeros((d, h, w), dtype=bool)
+            return [0.0] * 99, (0.0, 0.0), empty_mask, empty_mask, empty_mask
 
         valid_voxels = t_prob[:, valid_mask]
         q_voxels = torch.quantile(valid_voxels, q_levels, dim=0)
 
-        vol_cdf = (q_voxels >= 0.5).sum(dim=1).cpu().numpy().astype(np.float64) * voxel_vol_cm3
+        vol_cdf = q_voxels.sum(dim=1).cpu().numpy().astype(np.float64) * voxel_vol_cm3
+        vol_cdf_rounded = [round(float(v), 2) for v in vol_cdf]
 
-        m05_valid = (q_voxels[4] >= 0.5).cpu().numpy()
+        v_med = vol_cdf[49]
+        v_low_raw = vol_cdf[2]
+        v_high_raw = vol_cdf[96]
+
+        raw_half_width = max((v_high_raw - v_low_raw) / 2.0, 0.05 * v_med + 0.2)
+        ci_low = max(0.0, round(float(v_med - a_scale * raw_half_width), 2))
+        ci_high = round(float(v_med + a_scale * raw_half_width), 2)
+
         m50_valid = (q_voxels[49] >= 0.5).cpu().numpy()
-        m95_valid = (q_voxels[94] >= 0.5).cpu().numpy()
+        th_low = min(0.85, 0.5 + 0.15 * min(a_scale, 3.0))
+        th_high = max(0.15, 0.5 - 0.15 * min(a_scale, 3.0))
+
+        m05_valid = (q_voxels[4] >= th_low).cpu().numpy()
+        m95_valid = (q_voxels[94] >= th_high).cpu().numpy()
 
         valid_mask_np = valid_mask.cpu().numpy()
-
         mask_05 = np.zeros((d, h, w), dtype=bool)
         mask_50 = np.zeros((d, h, w), dtype=bool)
         mask_95 = np.zeros((d, h, w), dtype=bool)
@@ -172,10 +209,14 @@ class InferenceEngine:
         if self.device.type == "cuda":
             torch.cuda.empty_cache()
 
-        return [round(float(v), 2) for v in vol_cdf], mask_05, mask_50, mask_95
+        return vol_cdf_rounded, (ci_low, ci_high), mask_05, mask_50, mask_95
+
+    def _compute_fast_gpu_quantiles(self, prob_arr: np.ndarray, voxel_vol_cm3: float):
+        vol_cdf, _, mask_05, mask_50, mask_95 = self.compute_calibrated_quantiles(prob_arr, voxel_vol_cm3, a_scale=1.0)
+        return vol_cdf, mask_05, mask_50, mask_95
 
     @staticmethod
-    def postprocess_volume(pred: np.ndarray, second_lcc_min: int, et_min: int) -> np.ndarray:
+    def postprocess_volume(pred: np.ndarray, second_lcc_min: int = 100, et_min: int = 50) -> np.ndarray:
         output = pred.copy()
         tumor = output > 0
         labeled, count = ndimage.label(tumor)
@@ -246,16 +287,21 @@ class InferenceEngine:
 
         mc_probs = self.predict_mc_dropout_batched(stacked, num_passes=num_passes, batch_t=2)
 
-        wt_cdf, wt_05, wt_50, wt_95 = self._compute_fast_gpu_quantiles(mc_probs["WT"], voxel_vol_cm3)
-        tc_cdf, tc_05, tc_50, tc_95 = self._compute_fast_gpu_quantiles(mc_probs["TC"], voxel_vol_cm3)
-        et_cdf, et_05, et_50, et_95 = self._compute_fast_gpu_quantiles(mc_probs["ET"], voxel_vol_cm3)
+        factors = calibration_manager.cached_factors
+        a_wt = float(factors.get("a_wt", 1.75))
+        a_tc = float(factors.get("a_tc", 2.867))
+        a_et = float(factors.get("a_et", 2.6526))
+
+        wt_cdf, wt_ci, wt_05, wt_50, wt_95 = self.compute_calibrated_quantiles(mc_probs["WT"], voxel_vol_cm3, a_wt)
+        tc_cdf, tc_ci, tc_05, tc_50, tc_95 = self.compute_calibrated_quantiles(mc_probs["TC"], voxel_vol_cm3, a_tc)
+        et_cdf, et_ci, et_05, et_50, et_95 = self.compute_calibrated_quantiles(mc_probs["ET"], voxel_vol_cm3, a_et)
 
         def create_multilabel_mask(wt_m: np.ndarray, tc_m: np.ndarray, et_m: np.ndarray) -> np.ndarray:
             m = np.zeros((d, h, w), dtype=np.uint8)
             m[wt_m] = 3
             m[tc_m] = 2
             m[et_m] = 1
-            return self.postprocess_volume(m, settings.SECOND_LCC_MIN_VOXELS, settings.ET_MIN_VOXELS)
+            return self.postprocess_volume(m, second_lcc_min=100, et_min=50)
 
         mask_p05 = create_multilabel_mask(wt_05, tc_05, et_05)
         mask_p50 = create_multilabel_mask(wt_50, tc_50, et_50)
@@ -270,7 +316,6 @@ class InferenceEngine:
         self._save_nii_to_file(mask_p50, affine, header, p50_path)
         self._save_nii_to_file(mask_p95, affine, header, p95_path)
 
-        factors = calibration_manager.cached_factors
         percentiles_range = list(range(1, 100))
 
         return {
@@ -283,24 +328,27 @@ class InferenceEngine:
             "volumes_cm3": {
                 "WT": {
                     "median": wt_cdf[49],
+                    "ci_95": [wt_ci[0], wt_ci[1]],
                     "percentiles": percentiles_range,
                     "volumes_cm3": wt_cdf
                 },
                 "TC": {
                     "median": tc_cdf[49],
+                    "ci_95": [tc_ci[0], tc_ci[1]],
                     "percentiles": percentiles_range,
                     "volumes_cm3": tc_cdf
                 },
                 "ET": {
                     "median": et_cdf[49],
+                    "ci_95": [et_ci[0], et_ci[1]],
                     "percentiles": percentiles_range,
                     "volumes_cm3": et_cdf
                 }
             },
             "calibration_factors": {
-                "a_wt": float(factors.get("a_wt", 1.1524)),
-                "a_tc": float(factors.get("a_tc", 1.1218)),
-                "a_et": float(factors.get("a_et", 1.0845))
+                "a_wt": a_wt,
+                "a_tc": a_tc,
+                "a_et": a_et
             }
         }
 
