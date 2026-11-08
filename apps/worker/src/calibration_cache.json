@@ -1,31 +1,84 @@
 {
   "calibration_factors": {
-    "a_wt": 1.1524,
-    "a_tc": 1.1218,
-    "a_et": 1.0845
+    "a_wt": 1.75,
+    "a_tc": 2.867,
+    "a_et": 2.6526
   },
   "validation_details": {
     "dataset": "val_calibration",
-    "total_cases": 34,
+    "total_cases": 74,
     "mc_dropout_passes": 20,
     "method": "OLS Uniform Theoretical Quantile Matching",
     "folds": {
       "WT": [
-        {"fold": 1, "train_cases": 23, "val_cases": 11, "slope": 1.1482, "coverage_95": 0.9091},
-        {"fold": 2, "train_cases": 23, "val_cases": 11, "slope": 1.1610, "coverage_95": 1.0000},
-        {"fold": 3, "train_cases": 22, "val_cases": 12, "slope": 1.1480, "coverage_95": 0.9167}
+        {
+          "fold": 1,
+          "train_cases": 49,
+          "val_cases": 25,
+          "slope": 1.6815,
+          "coverage_95": 0.92
+        },
+        {
+          "fold": 2,
+          "train_cases": 49,
+          "val_cases": 25,
+          "slope": 1.7509,
+          "coverage_95": 0.96
+        },
+        {
+          "fold": 3,
+          "train_cases": 50,
+          "val_cases": 24,
+          "slope": 1.6577,
+          "coverage_95": 0.9167
+        }
       ],
       "TC": [
-        {"fold": 1, "train_cases": 23, "val_cases": 11, "slope": 1.1190, "coverage_95": 0.9091},
-        {"fold": 2, "train_cases": 23, "val_cases": 11, "slope": 1.1305, "coverage_95": 0.9091},
-        {"fold": 3, "train_cases": 22, "val_cases": 12, "slope": 1.1160, "coverage_95": 1.0000}
+        {
+          "fold": 1,
+          "train_cases": 49,
+          "val_cases": 25,
+          "slope": 2.1275,
+          "coverage_95": 0.84
+        },
+        {
+          "fold": 2,
+          "train_cases": 49,
+          "val_cases": 25,
+          "slope": 3.3362,
+          "coverage_95": 1.0
+        },
+        {
+          "fold": 3,
+          "train_cases": 50,
+          "val_cases": 24,
+          "slope": 2.9384,
+          "coverage_95": 0.9583
+        }
       ],
       "ET": [
-        {"fold": 1, "train_cases": 23, "val_cases": 11, "slope": 1.0810, "coverage_95": 0.9091},
-        {"fold": 2, "train_cases": 23, "val_cases": 11, "slope": 1.0920, "coverage_95": 1.0000},
-        {"fold": 3, "train_cases": 22, "val_cases": 12, "slope": 1.0805, "coverage_95": 0.9167}
+        {
+          "fold": 1,
+          "train_cases": 49,
+          "val_cases": 25,
+          "slope": 2.2289,
+          "coverage_95": 0.84
+        },
+        {
+          "fold": 2,
+          "train_cases": 49,
+          "val_cases": 25,
+          "slope": 2.7826,
+          "coverage_95": 0.96
+        },
+        {
+          "fold": 3,
+          "train_cases": 50,
+          "val_cases": 24,
+          "slope": 3.226,
+          "coverage_95": 1.0
+        }
       ]
     }
   }
 }
-
