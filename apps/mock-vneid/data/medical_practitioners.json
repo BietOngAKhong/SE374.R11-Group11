@@ -1,0 +1,30 @@
+[
+  {
+    "ma_cchn": "004512/BYT-CCHN",
+    "cccd": "001200099999",
+    "ho_va_ten": "BS. TRẦN MINH TÂM",
+    "pham_vi_hoat_dong": "Chẩn đoán hình ảnh thần kinh",
+    "ma_cskcb_cong_tac": "79024",
+    "ngay_cap": "2018-10-20",
+    "trang_thai": "Active"
+  },
+  {
+    "ma_cchn": "008891/BYT-CCHN",
+    "cccd": "001200088888",
+    "ho_va_ten": "BS. LE THI MAI",
+    "pham_vi_hoat_dong": "Ung bướu & Xạ trị",
+    "ma_cskcb_cong_tac": "01001",
+    "ngay_cap": "2020-05-14",
+    "trang_thai": "Active"
+  },
+  {
+    "ma_cchn": "009922/BYT-CCHN",
+    "cccd": "001200077777",
+    "ho_va_ten": "BS. PHAM HOANG LONG",
+    "pham_vi_hoat_dong": "Ngoại thần kinh",
+    "ma_cskcb_cong_tac": "01015",
+    "ngay_cap": "2019-12-01",
+    "trang_thai": "Suspended"
+  }
+]
+

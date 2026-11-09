@@ -1,0 +1,53 @@
+[
+  {
+    "cccd": "001200012345",
+    "ho_va_ten": "NGUYEN VAN AN",
+    "ngay_sinh": "1980-05-15",
+    "gioi_tinh": "Nam",
+    "so_dien_thoai": "0912345678",
+    "dia_chi_thuong_tru": "Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh",
+    "so_the_bhyt": "GD4797921500001",
+    "muc_huong_bhyt": 80
+  },
+  {
+    "cccd": "001200099999",
+    "ho_va_ten": "BS. TRẦN MINH TÂM",
+    "ngay_sinh": "1975-08-20",
+    "gioi_tinh": "Nam",
+    "so_dien_thoai": "0988776655",
+    "dia_chi_thuong_tru": "Phường 12, Quận 5, TP. Hồ Chí Minh",
+    "so_the_bhyt": "TE1797921599999",
+    "muc_huong_bhyt": 100
+  },
+  {
+    "cccd": "001200088888",
+    "ho_va_ten": "BS. LE THI MAI",
+    "ngay_sinh": "1985-03-12",
+    "gioi_tinh": "Nữ",
+    "so_dien_thoai": "0903123456",
+    "dia_chi_thuong_tru": "Phường Đồng Tâm, Quận Hai Bà Trưng, TP. Hà Nội",
+    "so_the_bhyt": "DN4010121588888",
+    "muc_huong_bhyt": 80
+  },
+  {
+    "cccd": "001200077777",
+    "ho_va_ten": "PHAM HOANG LONG",
+    "ngay_sinh": "1992-11-28",
+    "gioi_tinh": "Nam",
+    "so_dien_thoai": "0977654321",
+    "dia_chi_thuong_tru": "Phường Vĩnh Tuy, Quận Hai Bà Trưng, TP. Hà Nội",
+    "so_the_bhyt": "GD4010121577777",
+    "muc_huong_bhyt": 80
+  },
+  {
+    "cccd": "001200066666",
+    "ho_va_ten": "HOANG THI THU",
+    "ngay_sinh": "1968-09-05",
+    "gioi_tinh": "Nữ",
+    "so_dien_thoai": "0934567890",
+    "dia_chi_thuong_tru": "Phường Thạch Thang, Quận Hải Châu, TP. Đà Nẵng",
+    "so_the_bhyt": "HT2484821566666",
+    "muc_huong_bhyt": 95
+  }
+]
+

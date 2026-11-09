@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Bộ công an - Đăng nhập VNeID</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background-color: #5F0004;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #3E3333;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .page-bg {
+      background-color: #5F0004;
+      background-image: url('/assets/background-login.312c6c01.png');
+      background-position: center top;
+      background-repeat: no-repeat;
+      background-size: cover;
+      min-height: 100vh;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 36px 16px 48px 16px;
+    }
+    .logo-container {
+      margin-bottom: 32px;
+      text-align: center;
+    }
+    .logo-img {
+      width: 236px;
+      max-width: 80vw;
+      height: auto;
+      display: block;
+      margin: 0 auto;
+    }
+    .login-card {
+      background: #ffffff;
+      width: 100%;
+      max-width: 480px;
+      border-radius: 10px;
+      padding: 32px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      position: relative;
+    }
+    .login-title {
+      font-size: 22px;
+      font-weight: 600;
+      color: #3E3333;
+      margin-bottom: 22px;
+    }
+    .form-group {
+      margin-bottom: 18px;
+      position: relative;
+    }
+    .input-wrapper {
+      height: 52px;
+      width: 100%;
+      border: 1px solid #cecbcb;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      background: #ffffff;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      position: relative;
+    }
+    .input-wrapper:hover {
+      border-color: #9e9898;
+    }
+    .input-wrapper.focused {
+      border-color: #fecc0a !important;
+      box-shadow: 0 0 0 2px rgba(254, 204, 10, 0.25);
+    }
+    .input-prefix {
+      display: flex;
+      align-items: center;
+      margin-right: 12px;
+      flex-shrink: 0;
+    }
+    .input-suffix {
+      display: flex;
+      align-items: center;
+      margin-left: 8px;
+      flex-shrink: 0;
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+    .text-input {
+      width: 100%;
+      height: 100%;
+      border: none;
+      outline: none;
+      background: transparent;
+      font-size: 15px;
+      color: #333333;
+      font-family: inherit;
+    }
+    .text-input::placeholder {
+      color: #9ca3af;
+    }
+    .btn-submit {
+      width: 100%;
+      height: 46px;
+      background: #d71920;
+      border: none;
+      border-radius: 6px;
+      color: #ffffff;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 6px;
+      transition: background-color 0.2s;
+    }
+    .btn-submit:hover,
+    .btn-submit:focus {
+      background: #b30e14;
+      outline: none;
+    }
+    .help-text {
+      margin-top: 16px;
+      font-size: 13.5px;
+      color: #3e3333;
+      line-height: 1.4;
+    }
+    .help-link {
+      color: #3e3333;
+      font-weight: 600;
+      text-decoration: underline;
+    }
+    .help-link:hover {
+      color: #d71920;
+    }
+    .error-box {
+      margin-bottom: 16px;
+      padding: 10px 14px;
+      background: #fef2f2;
+      border-left: 4px solid #d71920;
+      border-radius: 4px;
+      font-size: 13px;
+      color: #b91c1c;
+    }
+    .combobox-dropdown {
+      position: absolute;
+      top: 56px;
+      left: 0;
+      right: 0;
+      background: #ffffff;
+      border: 1px solid #d9d9d9;
+      border-radius: 6px;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+      z-index: 100;
+      max-height: 240px;
+      overflow-y: auto;
+      display: none;
+    }
+    .combobox-dropdown.open {
+      display: block;
+    }
+    .combobox-item {
+      padding: 10px 14px;
+      cursor: pointer;
+      border-bottom: 1px solid #f3f4f6;
+      transition: background-color 0.15s;
+    }
+    .combobox-item:last-child {
+      border-bottom: none;
+    }
+    .combobox-item:hover {
+      background: #f9fafb;
+    }
+    .combobox-item-name {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: #1f2937;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .combobox-item-badge {
+      font-size: 11px;
+      font-weight: 500;
+      color: #6b7280;
+      background: #f3f4f6;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .combobox-item-sub {
+      font-size: 12px;
+      color: #6b7280;
+      margin-top: 2px;
+    }
+    .font-mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="page-bg">
+    <div class="logo-container">
+      <a href="/">
+        <img
+          src="/assets/logo-full-vneid.webp"
+          alt="Bộ Công An - Trung tâm Dữ liệu Quốc gia về Dân cư"
+          class="logo-img"
+        />
+      </a>
+    </div>
+
+    <div class="login-card">
+      <div class="login-title">Đăng nhập VNeID</div>
+
+      {{ERROR_SECTION}}
+
+      <form method="POST" action="/oauth/authorize" autocomplete="off">
+        <input type="hidden" name="client_id" value="{{CLIENT_ID}}" />
+        <input type="hidden" name="redirect_uri" value="{{REDIRECT_URI}}" />
+        <input type="hidden" name="state" value="{{STATE}}" />
+        <input type="hidden" name="scope" value="{{SCOPE}}" />
+        <input type="hidden" name="nonce" value="{{NONCE}}" />
+
+        <div class="form-group">
+          <div class="input-wrapper" id="username_wrapper">
+            <span class="input-prefix">
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 25 25">
+                <g id="ic_login_cccd" transform="translate(0.5 0.5)">
+                  <rect id="Frame" width="24" height="24" fill="none" stroke="#3e3333" stroke-width="1" opacity="0"></rect>
+                  <g id="Group_37865">
+                    <rect id="Rectangle_13777" width="24" height="24" fill="none"></rect>
+                    <g id="Group_37866">
+                      <rect id="Rectangle_13778" width="24" height="24" fill="none"></rect>
+                      <path id="Path_80570" d="M16.2,13.913a9.984,9.984,0,0,0-4.837-3.488,5.7,5.7,0,1,0-6.377,0A9.974,9.974,0,0,0,.15,13.913a.75.75,0,1,0,1.2.9,8.531,8.531,0,0,1,13.65,0,.75.75,0,0,0,1.2-.9M3.975,5.7a4.2,4.2,0,1,1,4.2,4.2,4.2,4.2,0,0,1-4.2-4.2" transform="translate(3.826 3.578)" fill="#3e3333"></path>
+                    </g>
+                  </g>
+                </g>
+              </svg>
+            </span>
+            <input
+              type="text"
+              id="username"
+              name="cccd"
+              maxLength="12"
+              placeholder="Số định danh cá nhân"
+              value="001200012345"
+              required
+              class="text-input"
+            />
+            <button type="button" class="input-suffix" id="btn_toggle_combobox" title="Chọn tài khoản mẫu">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 9l6 6 6-6"></path>
+              </svg>
+            </button>
+
+            <div class="combobox-dropdown" id="combobox_menu">
+              {{DROPDOWN_ITEMS}}
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <div class="input-wrapper" id="password_wrapper">
+            <span class="input-prefix">
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 25.5 25.5">
+                <defs>
+                  <clipPath id="clip-path">
+                    <rect id="Rectangle_14394" width="16" height="17.447" fill="none"></rect>
+                  </clipPath>
+                </defs>
+                <g id="ic_login_lock" transform="translate(0.75 0.75)">
+                  <rect id="Frame" width="24" height="24" fill="none" stroke="#3e3333" stroke-width="1.5" opacity="0"></rect>
+                  <g id="Group_37867">
+                    <rect id="Rectangle_13779" width="24" height="24" fill="none"></rect>
+                    <g id="Group_39364" transform="translate(4.001 2.934)">
+                      <g id="Group_39364-2" clip-path="url(#clip-path)">
+                        <path id="Path_80571" d="M14,5.447H11.785V4.017q0-.063,0-.126a3.954,3.954,0,0,0-7.907.126v1.43H2a2,2,0,0,0-2,2v8a2,2,0,0,0,2,2H14a2,2,0,0,0,2-2v-8a2,2,0,0,0-2-2m-8.622,0V4.017q0-.05,0-.1a2.454,2.454,0,1,1,4.907.1v1.43H5.378v0m9.122,10a.5.5,0,0,1-.5.5H2a.5.5,0,0,1-.5-.5v-8a.5.5,0,0,1,.5-.5H14a.5.5,0,0,1,.5.5Z" fill="#3e3333"></path>
+                        <path id="Path_80572" d="M8,10.333a1.2,1.2,0,1,0,1.2,1.2,1.2,1.2,0,0,0-1.2-1.2" fill="#3e3333"></path>
+                      </g>
+                    </g>
+                  </g>
+                </g>
+              </svg>
+            </span>
+            <input
+              type="password"
+              id="password"
+              name="password"
+              placeholder="Mật khẩu"
+              value="123456"
+              class="text-input"
+            />
+            <button type="button" class="input-suffix" id="btn_toggle_eye" title="Hiện/ẩn mật khẩu">
+              <svg id="ic_eye_on" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24">
+                <rect id="Frame" width="24" height="24" rx="10" fill="none"></rect>
+                <g id="Group_22070">
+                  <rect id="Rectangle_12505" width="24" height="24" fill="none"></rect>
+                  <path id="Path_78689" d="M26.5,55.25a11.932,11.932,0,0,1,8.593,3.595,13.262,13.262,0,0,1,2.593,3.6l.135.3-.135.3a13.262,13.262,0,0,1-2.593,3.6,12.068,12.068,0,0,1-17.186,0,13.262,13.262,0,0,1-2.593-3.6l-.135-.3.135-.3a13.262,13.262,0,0,1,2.593-3.6A11.932,11.932,0,0,1,26.5,55.25Zm9.661,7.5a12.512,12.512,0,0,0-2.167-2.883,10.566,10.566,0,0,0-14.988,0,12.511,12.511,0,0,0-2.167,2.883,12.512,12.512,0,0,0,2.167,2.883,10.566,10.566,0,0,0,14.988,0A12.511,12.511,0,0,0,36.161,62.75Z" transform="translate(-14.5 -50.75)" fill="#3e3333"></path>
+                  <path id="Ellipse_518" d="M3.75-.75a4.5,4.5,0,1,1-4.5,4.5A4.505,4.505,0,0,1,3.75-.75Zm0,7.5a3,3,0,1,0-3-3A3,3,0,0,0,3.75,6.75Z" transform="translate(8.25 8.25)" fill="#3e3333"></path>
+                </g>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-submit">
+          Đăng nhập
+        </button>
+      </form>
+
+      <div class="help-text">
+        Trường hợp không đăng nhập được, vui lòng <a href="#" class="help-link">xem hướng dẫn</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const userWrap = document.getElementById('username_wrapper');
+    const passWrap = document.getElementById('password_wrapper');
+    const userInput = document.getElementById('username');
+    const passInput = document.getElementById('password');
+    const toggleComboboxBtn = document.getElementById('btn_toggle_combobox');
+    const comboboxMenu = document.getElementById('combobox_menu');
+    const toggleEyeBtn = document.getElementById('btn_toggle_eye');
+
+    userInput.addEventListener('focus', () => userWrap.classList.add('focused'));
+    userInput.addEventListener('blur', () => userWrap.classList.remove('focused'));
+
+    passInput.addEventListener('focus', () => passWrap.classList.add('focused'));
+    passInput.addEventListener('blur', () => passWrap.classList.remove('focused'));
+
+    toggleComboboxBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      comboboxMenu.classList.toggle('open');
+    });
+
+    document.querySelectorAll('.combobox-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const cccd = item.getAttribute('data-cccd');
+        if (cccd) {
+          userInput.value = cccd;
+          passInput.value = '123456';
+          comboboxMenu.classList.remove('open');
+          userWrap.classList.add('focused');
+          setTimeout(() => userWrap.classList.remove('focused'), 1000);
+        }
+      });
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!userWrap.contains(e.target)) {
+        comboboxMenu.classList.remove('open');
+      }
+    });
+
+    toggleEyeBtn.addEventListener('click', () => {
+      if (passInput.type === 'password') {
+        passInput.type = 'text';
+      } else {
+        passInput.type = 'password';
+      }
+    });
+  </script>
+</body>
+</html>
+

@@ -1,0 +1,48 @@
+[
+  {
+    "ma_bv": "79024",
+    "ten_bv": "Bệnh viện Chợ Rẫy",
+    "ma_huyen": 1,
+    "tuyen_bv": 1,
+    "hang_bv": "ĐB",
+    "dia_chi": "201B Nguyễn Chí Thanh, Phường 12, Quận 5, TP. Hồ Chí Minh",
+    "ghi_chu": "BV"
+  },
+  {
+    "ma_bv": "01001",
+    "ten_bv": "Bệnh viện Bạch Mai",
+    "ma_huyen": 1,
+    "tuyen_bv": 1,
+    "hang_bv": "ĐB",
+    "dia_chi": "78 Giải Phóng, Phường Phương Mai, Quận Đống Đa, TP. Hà Nội",
+    "ghi_chu": "BV"
+  },
+  {
+    "ma_bv": "79011",
+    "ten_bv": "Bệnh viện Nhân dân 115",
+    "ma_huyen": 1,
+    "tuyen_bv": 1,
+    "hang_bv": "1",
+    "dia_chi": "527 Sư Vạn Hạnh, Phường 12, Quận 10, TP. Hồ Chí Minh",
+    "ghi_chu": "BV"
+  },
+  {
+    "ma_bv": "01015",
+    "ten_bv": "Bệnh viện Hữu nghị Việt Đức",
+    "ma_huyen": 1,
+    "tuyen_bv": 1,
+    "hang_bv": "ĐB",
+    "dia_chi": "40 Tràng Thi, Hàng Bông, Quận Hoàn Kiếm, TP. Hà Nội",
+    "ghi_chu": "BV"
+  },
+  {
+    "ma_bv": "48001",
+    "ten_bv": "Bệnh viện Đà Nẵng",
+    "ma_huyen": 1,
+    "tuyen_bv": 1,
+    "hang_bv": "1",
+    "dia_chi": "124 Hải Phòng, Thạch Thang, Quận Hải Châu, TP. Đà Nẵng",
+    "ghi_chu": "BV"
+  }
+]
+

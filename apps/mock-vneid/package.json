@@ -1,0 +1,19 @@
+{
+  "name": "mock-vneid",
+  "version": "1.0.0",
+  "description": "Mock VNeID Identity Provider and Ministry of Health/Public Security Verification Server",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jose": "^5.2.4",
+    "uuid": "^9.0.1"
+  }
+}
+
