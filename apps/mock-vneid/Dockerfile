@@ -7,6 +7,7 @@ RUN npm install --omit=dev
 
 COPY src ./src
 COPY data ./data
+COPY assets ./assets
 
 EXPOSE 5001
 

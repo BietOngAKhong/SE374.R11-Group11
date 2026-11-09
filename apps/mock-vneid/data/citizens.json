@@ -30,6 +30,26 @@
     "muc_huong_bhyt": 80
   },
   {
+    "cccd": "001200055555",
+    "ho_va_ten": "NGUYỄN VĂN ĐỨC",
+    "ngay_sinh": "1978-12-04",
+    "gioi_tinh": "Nam",
+    "so_dien_thoai": "0918776655",
+    "dia_chi_thuong_tru": "Phường 12, Quận 10, TP. Hồ Chí Minh",
+    "so_the_bhyt": "DN4797921555555",
+    "muc_huong_bhyt": 80
+  },
+  {
+    "cccd": "001200044444",
+    "ho_va_ten": "VŨ THỊ HƯƠNG",
+    "ngay_sinh": "1983-07-19",
+    "gioi_tinh": "Nữ",
+    "so_dien_thoai": "0982345678",
+    "dia_chi_thuong_tru": "Phường Hàng Bông, Quận Hoàn Kiếm, TP. Hà Nội",
+    "so_the_bhyt": "DN4010121544444",
+    "muc_huong_bhyt": 80
+  },
+  {
     "cccd": "001200077777",
     "ho_va_ten": "PHAM HOANG LONG",
     "ngay_sinh": "1992-11-28",
@@ -50,4 +70,3 @@
     "muc_huong_bhyt": 95
   }
 ]
-

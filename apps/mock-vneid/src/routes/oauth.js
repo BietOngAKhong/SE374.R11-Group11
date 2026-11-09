@@ -16,7 +16,8 @@ router.get('/oauth/authorize', (req, res) => {
     scope: scope || 'openid profile cccd bhyt',
     nonce: nonce || '',
     citizens: store.getCitizens(),
-    practitioners: store.getPractitioners()
+    practitioners: store.getPractitioners(),
+    facilities: store.getFacilities()
   });
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(html);
@@ -36,6 +37,7 @@ router.post('/oauth/authorize', (req, res) => {
       nonce: nonce || '',
       citizens: store.getCitizens(),
       practitioners: store.getPractitioners(),
+      facilities: store.getFacilities(),
       error: `Số định danh ${cccd} không tồn tại trong CSDL dân cư mẫu.`
     });
     return res.status(400).send(html);

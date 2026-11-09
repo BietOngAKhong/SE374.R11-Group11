@@ -9,7 +9,7 @@ module.exports = {
   issuer: process.env.ISSUER || 'http://localhost:5001',
   clientId: process.env.CLIENT_ID || 'neuroscan-client',
   clientSecret: process.env.CLIENT_SECRET || 'neuroscan-secret-key-123456',
-  defaultRedirectUri: process.env.DEFAULT_REDIRECT_URI || 'http://localhost:3000/api/auth/callback',
+  defaultRedirectUri: process.env.DEFAULT_REDIRECT_URI || 'http://localhost:3000/auth/callback',
   tokenExpiresIn: parseInt(process.env.TOKEN_EXPIRES_IN || '3600', 10),
   refreshTokenExpiresIn: parseInt(process.env.REFRESH_TOKEN_EXPIRES_IN || '2592000', 10)
 };

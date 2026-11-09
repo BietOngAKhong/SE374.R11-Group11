@@ -18,6 +18,24 @@
     "trang_thai": "Active"
   },
   {
+    "ma_cchn": "003344/BYT-CCHN",
+    "cccd": "001200055555",
+    "ho_va_ten": "BS. NGUYỄN VĂN ĐỨC",
+    "pham_vi_hoat_dong": "Chẩn đoán hình ảnh thần kinh",
+    "ma_cskcb_cong_tac": "79011",
+    "ngay_cap": "2017-06-15",
+    "trang_thai": "Active"
+  },
+  {
+    "ma_cchn": "007788/BYT-CCHN",
+    "cccd": "001200044444",
+    "ho_va_ten": "BS. VŨ THỊ HƯƠNG",
+    "pham_vi_hoat_dong": "Phẫu thuật thần kinh",
+    "ma_cskcb_cong_tac": "01015",
+    "ngay_cap": "2016-11-20",
+    "trang_thai": "Active"
+  },
+  {
     "ma_cchn": "009922/BYT-CCHN",
     "cccd": "001200077777",
     "ho_va_ten": "BS. PHAM HOANG LONG",
@@ -27,4 +45,3 @@
     "trang_thai": "Suspended"
   }
 ]
-
