@@ -1,4 +1,6 @@
 import time
+import logging
+import traceback
 from pathlib import Path
 from fastapi import APIRouter, File, UploadFile, HTTPException, Query, BackgroundTasks
 from fastapi.responses import JSONResponse, FileResponse
@@ -6,6 +8,8 @@ from fastapi.responses import JSONResponse, FileResponse
 from .config import settings
 from .inference import inference_engine
 from .schemas import HealthResponse
+
+logger = logging.getLogger("uvicorn.error")
 
 router = APIRouter()
 
@@ -56,6 +60,7 @@ async def run_uq_inference_endpoint(
 
         return JSONResponse(content=result)
     except Exception as e:
+        logger.error(f"Inference processing failed: {e}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/api/mask/{task_id}")

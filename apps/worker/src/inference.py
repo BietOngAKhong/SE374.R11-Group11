@@ -240,12 +240,18 @@ class InferenceEngine:
 
     @staticmethod
     def _load_nii_from_bytes(data: bytes) -> nib.Nifti1Image:
-        with tempfile.NamedTemporaryFile(suffix=".nii.gz", delete=False) as tmp:
+        is_gzipped = len(data) >= 2 and data[0] == 0x1F and data[1] == 0x8B
+        suffix = ".nii.gz" if is_gzipped else ".nii"
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
             tmp.write(data)
             tmp_path = tmp.name
         try:
             img = nib.load(tmp_path)
-            data_arr = img.get_fdata(dtype=np.float32)
+            data_arr = np.asanyarray(img.dataobj, dtype=np.float32)
+            if data_arr.ndim > 3:
+                data_arr = np.squeeze(data_arr)
+                if data_arr.ndim > 3:
+                    data_arr = data_arr[..., 0]
             affine = img.affine.copy()
             header = img.header.copy()
             return nib.Nifti1Image(data_arr, affine, header)
@@ -256,7 +262,10 @@ class InferenceEngine:
     @staticmethod
     def _save_nii_to_file(mask_arr: np.ndarray, affine: np.ndarray, header: Any, out_path: Path) -> None:
         spatial = mask_arr.transpose(1, 2, 0).astype(np.uint8)
-        nii_obj = nib.Nifti1Image(spatial, affine, header)
+        new_header = header.copy() if header is not None else None
+        if new_header is not None:
+            new_header.set_data_dtype(np.uint8)
+        nii_obj = nib.Nifti1Image(spatial, affine, new_header)
         nib.save(nii_obj, str(out_path))
 
     def run_uq_inference(
@@ -281,6 +290,13 @@ class InferenceEngine:
         t1_data = self.p95_normalize(t1_nii.get_fdata(dtype=np.float32))
         t1ce_data = self.p95_normalize(t1ce_nii.get_fdata(dtype=np.float32))
         t2_data = self.p95_normalize(t2_nii.get_fdata(dtype=np.float32))
+
+        if not (flair_data.shape == t1_data.shape == t1ce_data.shape == t2_data.shape):
+            raise ValueError(
+                f"MRI sequence shapes do not match: "
+                f"FLAIR={flair_data.shape}, T1={t1_data.shape}, "
+                f"T1ce={t1ce_data.shape}, T2={t2_data.shape}"
+            )
 
         stacked = np.stack([flair_data, t1_data, t1ce_data, t2_data], axis=0).transpose(0, 3, 1, 2)
         d, h, w = stacked.shape[1], stacked.shape[2], stacked.shape[3]

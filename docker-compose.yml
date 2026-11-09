@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: neuroscan_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-neuroscan_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-neuroscan_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: neuroscan_pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@neuroscan.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  vneid-mock:
+    build:
+      context: ./apps/mock-vneid
+      dockerfile: Dockerfile
+    container_name: neuroscan_vneid_mock
+    restart: unless-stopped
+    ports:
+      - "${VNEID_PORT:-5001}:5001"
+    environment:
+      PORT: 5001
+      HOST: 0.0.0.0
+      ISSUER: http://localhost:5001
+      CLIENT_ID: ${VNEID_CLIENT_ID:-neuroscan-client}
+      CLIENT_SECRET: ${VNEID_CLIENT_SECRET:-neuroscan-secret-key-123456}
+      DEFAULT_REDIRECT_URI: ${VNEID_REDIRECT_URI:-http://localhost:3000/api/auth/callback}
+
+volumes:
+  postgres_data:
+  pgadmin_data:
